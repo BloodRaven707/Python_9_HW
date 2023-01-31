@@ -1,0 +1,17 @@
+### Языки программирования
+# Python
+__pycache__/
+env/
+
+
+# C#
+[Bb][Ii][Nn]/
+[Oo][Bb][Jj]/
+
+
+### IDE
+# Visual Studio Code (VS Code)
+.vscode/
+
+# Microsoft Visual Studio
+.vs/

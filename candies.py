@@ -3,6 +3,8 @@ from random import choice, randint
 from aiogram import types
 
 import bot_data
+from logger import log
+from user_kb import kbs
 
 # #
 # Добавить кнопки: 1 и 28 для выбора конфет
@@ -10,86 +12,105 @@ import bot_data
 # Доработка бота - для более сложной логики...
 # #
 
-candies = {}
+_module_name = "candies"
+users_candies = {}
 
 
+# Запуск новой игры
 async def new_game( message: types.Message ) -> int:
-    global candies, move
-    user = message.from_user.full_name
-    candies[ user ] = {}
-    candies[ user ][ "count" ] = 140
-    candies[ user ][ "move" ] = choice( [True, False] )
-    await message.answer( f"{ user }, игра началась..." \
+    user_id = message.from_user.id
+    await log( __name__, "new_game", f"{ user_id }: { message.text }" )
+
+    users_candies[ user_id ] = {}
+  # users_candies[ user_id ][ "start_count" ] = 300
+  # users_candies[ user_id ][ "max_taken" ] = 30
+    users_candies[ user_id ][ "count" ] = 140
+
+    user_name = message.from_user.full_name
+    await message.answer( f"{ user_name }, игра началась..." \
                           f"Для выхода введите > /stop" )
-    if candies[ user ][ "move" ] == True:
-        await message.answer( f"На столе лежит { candies[ user ][ 'count' ] } конфет{ declension( candies[ user ][ 'count' ] )[ 0 ] }\n" \
-                              f"{ user }, сколько конфет возьмете вы? " )
+    if choice( [True, False] ) == True:
+        await message.answer( f"На столе лежит { users_candies[ user_id ][ 'count' ] } " \
+                              f"конфет{ declension( users_candies[ user_id ][ 'count' ] )[ 0 ] }\n" \
+                              f"{ user_name }, сколько конфет возьмете вы?", reply_markup=kbs )
     else:
         await bot( message )
 
 
-async def player( message: types.Message ):
-    taken = ""
-    user = message.from_user.full_name
+# Ход игрока
+async def player( message: types.Message ) -> bool:
+    user_id = message.from_user.id
+    await log( __name__, "player", f"{ user_id }: { message.text }" )
+
     while True:
         taken = message.text
         if taken.isdigit():
             taken = int( taken )
-            if taken > candies[ user ][ "count" ]:
+            if taken > users_candies[ user_id ][ "count" ]:
                 await message.answer( f"Вы хотите взять { taken } конфет{ declension( taken )[ 0 ] }, "
-                                      f"но на столе всего { candies[ user ][ 'count' ] } конфет{ declension( taken )[ 0 ] }.\n"
-                                      f"Возьми поменьше, не жадничай 😃" )
-
+                                      f"но на столе всего { users_candies[ user_id ][ 'count' ] } " \
+                                      f"конфет{ declension( taken )[ 0 ] }.\n"
+                                      f"Возьми поменьше, не жадничай 😃", reply_markup=kbs )
+                return False
             elif taken < 1 or taken > 28:
-                if candies[ user ][ "count" ] > 28: # > 29
-                    await message.answer( "Вы должны взять не менее 1 и не более 28 конфет..." )
+                if users_candies[ user_id ][ "count" ] > 28: # > 29
+                    await message.answer( "Вы должны взять не менее 1 и не более 28 конфет...", reply_markup=kbs )
                 else:
-                    await message.answer( "Помните победит тот кто возьмет последние конфеты..." )
+                    await message.answer( "Помните победит тот кто возьмет последние конфеты...", reply_markup=kbs )
                     # await message.answer( "Помните взяв последнюю конфету вы проиграете..." ) для другого режима
+                return False
             else:
                 break
 
-    if await check_win(message, "player", taken):
-        return
+    if await check_win( message, "player", taken ):
+        await log( __name__, "player", f"{ user_id }: Победил" )
+        return True
 
     await message.answer( f"Вы берете { taken } конфет{ declension( taken )[ 1 ] }\n" \
-                          f"На столе осталось { candies[ user ][ 'count' ] } "
-                          f"конфет{ declension( candies[ user ][ 'count' ] )[ 0 ] }." )
+                          f"На столе осталось { users_candies[ user_id ][ 'count' ] } "
+                          f"конфет{ declension( users_candies[ user_id ][ 'count' ] )[ 0 ] }." )
 
-    await bot( message )
+    return await bot( message )
 
 
-async def bot( message: types.Message ):
-    user = message.from_user.full_name
-    taken = 0
-    if candies[ user ][ "count" ] <= 28: # 29 для другого режима
-        taken = candies[ user ][ "count" ] # 29 -1 для другого режима
+# Ход бота
+async def bot( message: types.Message ) -> bool:
+    user_id = message.from_user.id
+
+    user_name = message.from_user.full_name
+    if users_candies[ user_id ][ "count" ] <= 28: # 29 для другого режима
+        taken = users_candies[ user_id ][ "count" ] # 29 -1 для другого режима
     else:
         taken = randint( 1, 28 )
 
     if await check_win( message, "Бот", taken ):
-        return
+        await log( __name__, "player", f"{ user_id }: Проиграл" )
+        return True
 
     await message.answer( f"Бот берет { taken } конфет{ declension( taken )[ 1 ] }\n" \
-                          f"На столе осталось { candies[ user ][ 'count' ] } "
-                          f"конфет{ declension( candies[ user ][ 'count' ] )[ 0 ] }." )
+                          f"На столе осталось { users_candies[ user_id ][ 'count' ] } "
+                          f"конфет{ declension( users_candies[ user_id ][ 'count' ] )[ 0 ] }." )
 
-    await message.answer( f"{ user }, сколько конфет возьмете вы?" )
+    await message.answer( f"{ user_name }, сколько конфет возьмете вы?", reply_markup=kbs )
+    return False
 
 
+# Проверка...
 async def check_win( message: types.Message, player: str, taken: int ) -> bool:
-    global candies
-    user = message.from_user.full_name
-    candies[ user ][ "count" ] -= taken
+    user_id = message.from_user.id
 
-    if candies[ user ][ "count" ] == 0:
+    user_name = message.from_user.full_name
+    users_candies[ user_id ][ "count" ] -= taken
+
+    if users_candies[ user_id ][ "count" ] == 0:
         if player == "player":
             await message.answer( f"Вы берете { taken } конфет{ declension( taken )[ 1 ] }\n" \
                                   f"\nКонфет больше нет! "
-                                  f"\n{ user } позравляю, вы победили...🤓"
+                                  f"\n{ user_name } позравляю, вы победили...🤓"
                                   f"\n\nЕще разок? > /candies_game")
         else:
-            await message.answer( f"Конфет больше нет! Выиграл бот! 😎\n"
+            await message.answer( f"Бот берет { taken } конфет{ declension( taken )[ 1 ] }\n" \
+                                  f"Конфет больше нет! Выиграл бот! 😎\n"
                                   f"Как насчет реванша?:) > /candies_game")
 
         return True
@@ -97,6 +118,7 @@ async def check_win( message: types.Message, player: str, taken: int ) -> bool:
         return False
 
 
+# Частичная реализация склонений для русских слов, для полноценной рализиции нужен словарь с категориями или система анализа
 def declension( count: int ) -> str:    # Спасибо Елене за идею...
     count_str = str( count )
     count_len = len( count_str )
